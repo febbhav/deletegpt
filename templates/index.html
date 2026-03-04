@@ -674,7 +674,13 @@
   let totalAvailable = 0;
   let hasMore = false;
 
-  const token = () => document.getElementById('token-input').value.trim();
+  const token = () => {
+    const val = document.getElementById('token-input').value.trim();
+    if (val.startsWith('{')) {
+      try { return (JSON.parse(val).accessToken || val).trim(); } catch {}
+    }
+    return val;
+  };
 
   // ── Load (first page) ─────────────────────────────────────────────────────
   async function loadConversations() {
