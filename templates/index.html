@@ -440,6 +440,72 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Danger zone button ── */
+    .btn-danger-zone {
+      background: transparent;
+      color: #f87171;
+      border: 1px solid #7f1d1d;
+      font-size: 12px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    .btn-danger-zone:hover:not(:disabled) {
+      background: #450a0a;
+      border-color: #ef4444;
+      color: #fca5a5;
+    }
+    .btn-danger-zone:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Confirm modal ── */
+    #confirm-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(4px);
+      z-index: 1001;
+      align-items: center;
+      justify-content: center;
+    }
+    #confirm-modal.active { display: flex; }
+    .confirm-card {
+      background: #1a1a1a;
+      border: 1px solid #3f0c0c;
+      border-radius: 14px;
+      padding: 32px;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+    }
+    .confirm-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+    .confirm-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fca5a5;
+      margin-bottom: 8px;
+    }
+    .confirm-body {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .confirm-body strong { color: #f87171; }
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
     /* ── Delete overlay ── */
     #delete-overlay {
       display: none;
@@ -641,13 +707,31 @@
 
     <!-- Bottom delete-all -->
     <div style="display:flex; justify-content:flex-end; padding-top:4px">
-      <button class="btn-danger btn-sm" onclick="deleteAll()" id="delete-all-btn">
-        Delete ALL conversations
+      <button class="btn-danger-zone" onclick="confirmDeleteAll()" id="delete-all-btn">
+        ⚠ Delete ALL conversations
       </button>
     </div>
 
   </div>
 </main>
+
+<!-- Confirm delete-all modal -->
+<div id="confirm-modal" onclick="if(event.target===this)closeConfirmModal()">
+  <div class="confirm-card">
+    <div class="confirm-icon">🗑️</div>
+    <div class="confirm-title">Delete ALL conversations?</div>
+    <div class="confirm-body" id="confirm-body">
+      This will permanently delete <strong id="confirm-count"></strong>.<br>
+      There is no undo.
+    </div>
+    <div class="confirm-actions">
+      <button class="btn-ghost" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn-danger" onclick="confirmDeleteAllConfirmed()" style="background:#7f1d1d; border:1px solid #ef4444;">
+        Yes, delete everything
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- Delete loading overlay -->
 <div id="delete-overlay">
@@ -991,11 +1075,22 @@
   }
 
   // ── Delete all ────────────────────────────────────────────────────────────
-  async function deleteAll() {
+  function confirmDeleteAll() {
     const n = allConversations.length;
     if (!n) { showToast('No conversations to delete.', 'error'); return; }
-    if (!confirm(`Delete ALL ${n} conversations? This cannot be undone.`)) return;
+    const label = totalAvailable > allConversations.length
+      ? `all ${totalAvailable} conversations (${allConversations.length} loaded + ${totalAvailable - allConversations.length} not yet loaded)`
+      : `all ${n} conversation${n !== 1 ? 's' : ''}`;
+    document.getElementById('confirm-count').textContent = label;
+    document.getElementById('confirm-modal').classList.add('active');
+  }
 
+  function closeConfirmModal() {
+    document.getElementById('confirm-modal').classList.remove('active');
+  }
+
+  async function confirmDeleteAllConfirmed() {
+    closeConfirmModal();
     showOverlay('Deleting all conversations…', 'Please wait, do not close this tab');
     document.getElementById('delete-all-btn').disabled = true;
     document.getElementById('load-btn').disabled = true;
