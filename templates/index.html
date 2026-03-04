@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatGPT Conversation Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0d;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #2e2e2e;
+      --text: #ececec;
+      --muted: #888;
+      --accent: #10a37f;
+      --accent-hover: #0d8f6e;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --warn: #f59e0b;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header svg { flex-shrink: 0; }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header .subtitle { font-size: 13px; color: var(--muted); margin-left: auto; }
+
+    /* ── Main layout ── */
+    main {
+      flex: 1;
+      max-width: 1000px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── Bookmarklet ── */
+    .bookmarklet-wrap {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: #12201a;
+      border: 1px dashed #2a5040;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .bookmarklet-wrap p { font-size: 13px; color: var(--muted); line-height: 1.5; flex: 1; }
+    .bookmarklet-wrap p strong { color: var(--text); }
+    .bookmarklet-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 16px;
+      border-radius: 8px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      cursor: grab;
+      transition: background .15s;
+    }
+    .bookmarklet-link:hover { background: var(--accent-hover); }
+    .bookmarklet-link:active { cursor: grabbing; }
+    .drag-hint {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    /* ── Token card ── */
+    .token-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .token-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .token-card p  { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+    .token-card p a { color: var(--accent); text-decoration: none; }
+    .token-card p a:hover { text-decoration: underline; }
+
+    .token-row {
+      display: flex;
+      gap: 10px;
+    }
+    .token-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 10px 14px;
+      font-family: monospace;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .token-row input:focus { border-color: var(--accent); }
+
+    /* ── Buttons ── */
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 10px 18px;
+      transition: background .15s, opacity .15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+    .btn-danger  { background: var(--danger); color: #fff; }
+    .btn-danger:hover:not(:disabled)  { background: var(--danger-hover); }
+
+    .btn-ghost   { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled)   { background: var(--border); }
+
+    .btn-sm { font-size: 12px; padding: 6px 12px; }
+
+    /* ── Conversations panel ── */
+    #conversations-panel { display: none; flex-direction: column; gap: 16px; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .toolbar .count-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .toolbar .count-badge span { color: var(--text); font-weight: 600; }
+    .toolbar .spacer { flex: 1; }
+
+    .search-box {
+      position: relative;
+    }
+    .search-box input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 8px 12px 8px 34px;
+      outline: none;
+      width: 220px;
+      transition: border-color .15s;
+    }
+    .search-box input:focus { border-color: var(--accent); }
+    .search-box svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    /* ── Selection bar ── */
+    #selection-bar {
+      background: #1c2e26;
+      border: 1px solid #2a4a39;
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+    }
+    #selection-bar .sel-text { color: #6ee7b7; font-weight: 500; }
+    #selection-bar .spacer   { flex: 1; }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--surface2);
+      padding: 11px 16px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+    thead th:first-child { width: 44px; text-align: center; }
+    thead th.th-sort { cursor: pointer; }
+    thead th.th-sort:hover { color: var(--text); }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr.selected { background: #1a2e24; }
+
+    td { padding: 12px 16px; font-size: 14px; vertical-align: middle; }
+    td:first-child { text-align: center; }
+    td.td-title { max-width: 0; }
+    td.td-title .title-text {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 400px;
+    }
+    td.td-date { color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+    /* expand toggle */
+    .expand-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      font-size: 11px;
+      border-radius: 4px;
+      transition: color .15s, background .15s;
+      line-height: 1;
+    }
+    .expand-btn:hover { color: var(--text); background: var(--border); }
+    .expand-btn.open { color: var(--accent); }
+
+    /* preview row */
+    tr.preview-row td {
+      padding: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .preview-inner {
+      padding: 10px 56px 14px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      background: #141414;
+    }
+    .preview-inner .preview-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #555;
+      margin-bottom: 4px;
+    }
+    .preview-inner .preview-text { color: #bbb; }
+
+    /* Custom checkbox */
+    input[type="checkbox"] {
+      width: 17px; height: 17px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* ── Empty / loading ── */
+    .empty-state {
+      padding: 60px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .empty-state svg { display: block; margin: 0 auto 16px; opacity: .3; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1e1e1e;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 22px;
+      font-size: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: var(--accent); color: #6ee7b7; }
+    #toast.error   { border-color: var(--danger); color: #fca5a5; }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Delete overlay ── */
+    #delete-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.75);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+    }
+    #delete-overlay.active { display: flex; }
+    .overlay-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 36px 48px;
+      text-align: center;
+      min-width: 320px;
+      max-width: 420px;
+    }
+    .overlay-spinner {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(239,68,68,.2);
+      border-top-color: var(--danger);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 20px;
+    }
+    .overlay-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .overlay-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .overlay-bar-track {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .overlay-bar-fill {
+      height: 100%;
+      background: var(--danger);
+      border-radius: 3px;
+      transition: width .2s;
+      width: 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 41 41" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M37.532 16.87a9.963 9.963 0 0 0-.856-8.184 10.078 10.078 0 0 0-10.855-4.835 9.964 9.964 0 0 0-6.239-2.566 10.078 10.078 0 0 0-9.612 6.977 9.967 9.967 0 0 0-6.666 4.834 10.08 10.08 0 0 0 1.24 11.817 9.965 9.965 0 0 0 .856 8.185 10.079 10.079 0 0 0 10.855 4.835 9.965 9.965 0 0 0 6.239 2.566 10.079 10.079 0 0 0 9.617-6.981 9.967 9.967 0 0 0 6.663-4.834 10.079 10.079 0 0 0-1.242-11.814zm-17.297 24.12a7.473 7.473 0 0 1-4.799-1.735c.061-.033.168-.091.237-.134l7.964-4.6a1.294 1.294 0 0 0 .655-1.134V19.054l3.366 1.944a.12.12 0 0 1 .066.092v9.299a7.505 7.505 0 0 1-7.49 7.601zM4.392 28.006a7.471 7.471 0 0 1-.894-5.023c.06.036.162.099.237.141l7.964 4.6a1.297 1.297 0 0 0 1.308 0l9.724-5.614v3.888a.12.12 0 0 1-.048.103l-8.051 4.649a7.504 7.504 0 0 1-10.24-2.744zM2.408 13.591a7.47 7.47 0 0 1 3.904-3.281v9.477a1.294 1.294 0 0 0 .654 1.132l9.723 5.614-3.366 1.944a.12.12 0 0 1-.114.012L4.2 23.136a7.505 7.505 0 0 1-1.792-9.545zm27.654 6.437l-9.724-5.615 3.367-1.943a.121.121 0 0 1 .114-.012l9.009 5.202a7.5 7.5 0 0 1-1.158 13.528v-9.476a1.293 1.293 0 0 0-.608-1.684zm3.35-5.043c-.059-.037-.162-.099-.236-.141l-7.965-4.6a1.298 1.298 0 0 0-1.308 0l-9.723 5.614v-3.888a.12.12 0 0 1 .048-.103l8.05-4.645a7.497 7.497 0 0 1 11.135 7.763zm-21.063 6.929l-3.367-1.944a.12.12 0 0 1-.065-.092v-9.299a7.497 7.497 0 0 1 12.293-5.756 6.94 6.94 0 0 0-.236.134l-7.965 4.6a1.294 1.294 0 0 0-.654 1.132l-.006 11.225zm1.829-3.943l4.33-2.501 4.332 2.5v4.999l-4.331 2.5-4.331-2.5V17.97z" fill="currentColor"/>
+  </svg>
+  <h1>ChatGPT Conversation Manager</h1>
+  <span class="subtitle">Bulk select &amp; delete conversations</span>
+</header>
+
+<main>
+  <!-- Token setup -->
+  <div class="token-card">
+    <h2>Step 1 — Connect to ChatGPT</h2>
+
+    <!-- Bookmarklet -->
+    <div class="bookmarklet-wrap">
+      <div>
+        <p>
+          <strong>Easiest way:</strong> drag the button to your bookmarks bar.
+          Then go to <strong>chatgpt.com</strong> (while logged in) and click it —
+          your token will be filled in automatically.
+        </p>
+        <div class="drag-hint">⬆ drag this to your bookmarks bar</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <a class="bookmarklet-link" id="bookmarklet-link" href="#" title="Drag me to your bookmarks bar">
+          🔑 Get Token
+        </a>
+        <div class="drag-hint">⬆ drag to bookmarks bar</div>
+      </div>
+    </div>
+
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+      Or paste your token manually below (optional fallback):
+    </p>
+    <div class="token-row">
+      <input
+        type="password"
+        id="token-input"
+        placeholder="Token will auto-fill when you use the bookmarklet…"
+        autocomplete="off"
+        spellcheck="false"
+        value="{{ prefill_token }}"
+      />
+      <button class="btn-primary" id="load-btn" onclick="loadConversations()">
+        Load Conversations
+      </button>
+    </div>
+  </div>
+
+  <!-- Conversations panel -->
+  <div id="conversations-panel">
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="count-badge">
+        <span id="total-count">0</span> loaded
+        <span id="total-available-badge"></span>
+      </div>
+      <div class="spacer"></div>
+      <div class="search-box">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search…" oninput="applyFilter()" />
+      </div>
+      <button class="btn-ghost btn-sm" onclick="sortBy('title')">Sort A–Z</button>
+      <button class="btn-ghost btn-sm" onclick="sortBy('date')">Sort by Date</button>
+      <button class="btn-ghost btn-sm" onclick="loadConversations()">↺ Refresh</button>
+    </div>
+
+    <!-- Selection action bar -->
+    <div id="selection-bar">
+      <span class="sel-text" id="sel-count-text">0 selected</span>
+      <div class="spacer"></div>
+      <button class="btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
+      <button class="btn-danger" id="delete-selected-btn" onclick="deleteSelected()">
+        Delete Selected
+      </button>
+    </div>
+
+
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>
+              <input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this.checked)" title="Select all" />
+            </th>
+            <th>Title</th>
+            <th>Last Updated</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="conv-tbody"></tbody>
+      </table>
+      <div id="empty-state" class="empty-state" style="display:none">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.671 1.09-.085 2.17-.207 3.238-.364 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"/>
+        </svg>
+        No conversations match your search.
+      </div>
+    </div>
+
+    <!-- Load more -->
+    <div id="load-more-wrap" style="display:none; align-items:center; gap:12px; padding: 4px 0;">
+      <span id="load-more-info" style="font-size:13px; color:var(--muted);"></span>
+      <div style="flex:1"></div>
+      <button class="btn-ghost" id="load-more-btn" onclick="loadMore()">Load 50 more</button>
+    </div>
+
+    <!-- Bottom delete-all -->
+    <div style="display:flex; justify-content:flex-end; padding-top:4px">
+      <button class="btn-danger btn-sm" onclick="deleteAll()" id="delete-all-btn">
+        Delete ALL conversations
+      </button>
+    </div>
+
+  </div>
+</main>
+
+<!-- Delete loading overlay -->
+<div id="delete-overlay">
+  <div class="overlay-card">
+    <div class="overlay-spinner"></div>
+    <div class="overlay-title" id="overlay-title">Deleting conversations…</div>
+    <div class="overlay-sub" id="overlay-sub">Please wait, do not close this tab</div>
+    <div class="overlay-bar-track">
+      <div class="overlay-bar-fill" id="overlay-bar-fill"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  let allConversations = [];   // accumulated loaded conversations
+  let filtered = [];           // after search/sort
+  let selected = new Set();    // selected IDs
+  let sortKey = 'date';
+  let sortAsc = false;
+  const previewCache = {};     // conv_id -> preview text (cached)
+  let currentOffset = 0;
+  let totalAvailable = 0;
+  let hasMore = false;
+
+  const token = () => document.getElementById('token-input').value.trim();
+
+  // ── Load (first page) ─────────────────────────────────────────────────────
+  async function loadConversations() {
+    const t = token();
+    if (!t) { showToast('Please paste your access token first.', 'error'); return; }
+
+    const btn = document.getElementById('load-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Loading…';
+
+    try {
+      // Reset state for a fresh load
+      allConversations = [];
+      currentOffset = 0;
+      selected.clear();
+
+      await fetchPage(0);
+
+      document.getElementById('conversations-panel').style.display = 'flex';
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Load Conversations';
+    }
+  }
+
+  // ── Fetch one page ────────────────────────────────────────────────────────
+  async function fetchPage(offset) {
+    const t = token();
+    const res = await fetch(
+      `/api/conversations?token=${encodeURIComponent(t)}&offset=${offset}`
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    allConversations.push(...(data.conversations || []));
+    currentOffset = offset + (data.conversations || []).length;
+    totalAvailable = data.total || 0;
+    hasMore = data.has_more || false;
+
+    applyFilter();
+    updateLoadMoreBtn();
+
+    const remaining = totalAvailable - currentOffset;
+    showToast(
+      hasMore
+        ? `Loaded ${currentOffset} of ${totalAvailable} — ${remaining} more available`
+        : `All ${allConversations.length} conversations loaded`,
+      'success'
+    );
+  }
+
+  // ── Load more ─────────────────────────────────────────────────────────────
+  async function loadMore() {
+    const btn = document.getElementById('load-more-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Loading…';
+    try {
+      await fetchPage(currentOffset);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      updateLoadMoreBtn();
+    }
+  }
+
+  function updateLoadMoreBtn() {
+    const wrap = document.getElementById('load-more-wrap');
+    const btn  = document.getElementById('load-more-btn');
+    const info = document.getElementById('load-more-info');
+    if (!wrap) return;
+    if (hasMore) {
+      const remaining = totalAvailable - currentOffset;
+      wrap.style.display = '';
+      btn.innerHTML = `Load ${Math.min(50, remaining)} more`;
+      info.textContent = `Showing ${currentOffset} of ${totalAvailable} conversations`;
+    } else {
+      wrap.style.display = 'none';
+    }
+  }
+
+  // ── Filter + sort ─────────────────────────────────────────────────────────
+  function applyFilter() {
+    const q = document.getElementById('search-input').value.toLowerCase();
+    filtered = allConversations.filter(c =>
+      (c.title || '').toLowerCase().includes(q)
+    );
+    sortFiltered();
+    renderTable();
+  }
+
+  function sortBy(key) {
+    if (sortKey === key) sortAsc = !sortAsc;
+    else { sortKey = key; sortAsc = key === 'title'; }
+    sortFiltered();
+    renderTable();
+  }
+
+  function sortFiltered() {
+    filtered.sort((a, b) => {
+      let va, vb;
+      if (sortKey === 'title') {
+        va = (a.title || '').toLowerCase();
+        vb = (b.title || '').toLowerCase();
+      } else {
+        va = a.update_time || '';
+        vb = b.update_time || '';
+      }
+      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function renderTable() {
+    const tbody = document.getElementById('conv-tbody');
+    const empty = document.getElementById('empty-state');
+    document.getElementById('total-count').textContent = allConversations.length;
+    const badge = document.getElementById('total-available-badge');
+    if (totalAvailable > allConversations.length) {
+      badge.textContent = ` of ${totalAvailable}`;
+      badge.style.color = 'var(--muted)';
+    } else {
+      badge.textContent = '';
+    }
+
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      empty.style.display = '';
+      updateSelectionBar();
+      return;
+    }
+    empty.style.display = 'none';
+
+    tbody.innerHTML = filtered.map(conv => {
+      const title = escHtml(conv.title || '(No title)');
+      const date  = formatDate(conv.update_time);
+      const chk   = selected.has(conv.id) ? 'checked' : '';
+      const sel   = selected.has(conv.id) ? 'selected' : '';
+      const safeId = conv.id.replace(/[^a-zA-Z0-9-]/g, '');
+      return `<tr class="${sel}" id="row-${safeId}">
+        <td><input type="checkbox" ${chk} onchange="toggleRow('${conv.id}', this.checked)" /></td>
+        <td class="td-title"><span class="title-text" title="${title}">${title}</span></td>
+        <td class="td-date">${date}</td>
+        <td><button class="expand-btn" id="expbtn-${safeId}" onclick="togglePreview('${conv.id}')" title="Preview first message">▶</button></td>
+      </tr>
+      <tr class="preview-row" id="preview-${safeId}" style="display:none">
+        <td colspan="4">
+          <div class="preview-inner" id="preview-inner-${safeId}">
+            <div class="preview-label">First message</div>
+            <div class="preview-text">Loading…</div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+    updateSelectionBar();
+    updateSelectAllCb();
+  }
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+  function toggleRow(id, checked) {
+    checked ? selected.add(id) : selected.delete(id);
+    const row = document.getElementById(`row-${id}`);
+    if (row) row.className = checked ? 'selected' : '';
+    updateSelectionBar();
+    updateSelectAllCb();
+  }
+
+  function toggleSelectAll(checked) {
+    filtered.forEach(c => checked ? selected.add(c.id) : selected.delete(c.id));
+    renderTable();
+  }
+
+  function clearSelection() {
+    selected.clear();
+    renderTable();
+  }
+
+  function updateSelectionBar() {
+    const bar = document.getElementById('selection-bar');
+    const n = selected.size;
+    bar.style.display = n > 0 ? 'flex' : 'none';
+    document.getElementById('sel-count-text').textContent =
+      `${n} conversation${n !== 1 ? 's' : ''} selected`;
+  }
+
+  function updateSelectAllCb() {
+    const cb = document.getElementById('select-all-cb');
+    const visibleSelected = filtered.filter(c => selected.has(c.id)).length;
+    cb.checked = filtered.length > 0 && visibleSelected === filtered.length;
+    cb.indeterminate = visibleSelected > 0 && visibleSelected < filtered.length;
+  }
+
+  // ── Preview (first message) ───────────────────────────────────────────────
+  async function togglePreview(id) {
+    const safeId = id.replace(/[^a-zA-Z0-9-]/g, '');
+    const row    = document.getElementById(`preview-${safeId}`);
+    const btn    = document.getElementById(`expbtn-${safeId}`);
+    const inner  = document.getElementById(`preview-inner-${safeId}`);
+
+    const isOpen = row.style.display !== 'none';
+    if (isOpen) {
+      row.style.display = 'none';
+      btn.classList.remove('open');
+      btn.textContent = '▶';
+      return;
+    }
+
+    row.style.display = '';
+    btn.classList.add('open');
+    btn.textContent = '▼';
+
+    if (previewCache[id]) {
+      inner.querySelector('.preview-text').textContent = previewCache[id];
+      return;
+    }
+
+    inner.querySelector('.preview-text').textContent = 'Loading…';
+    try {
+      const res  = await fetch(`/api/conversation/${encodeURIComponent(id)}/preview?token=${encodeURIComponent(token())}`);
+      const data = await res.json();
+      const text = data.preview || data.error || 'No content found.';
+      previewCache[id] = text;
+      inner.querySelector('.preview-text').textContent = text;
+    } catch (e) {
+      inner.querySelector('.preview-text').textContent = 'Failed to load preview.';
+    }
+  }
+
+  // ── Delete selected ───────────────────────────────────────────────────────
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected conversation${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+    setDeletingState(true, ids.length);
+
+    const res = await deleteInBatches(ids);
+
+    // Remove deleted from local list
+    const deletedSet = new Set(res.deleted);
+    allConversations = allConversations.filter(c => !deletedSet.has(c.id));
+    selected.clear();
+    applyFilter();
+    setDeletingState(false);
+
+    const msg = res.failed.length
+      ? `Deleted ${res.deleted.length}, failed: ${res.failed.length}`
+      : `Deleted ${res.deleted.length} conversation${res.deleted.length !== 1 ? 's' : ''}`;
+    showToast(msg, res.failed.length ? 'error' : 'success');
+  }
+
+  async function deleteInBatches(ids) {
+    const BATCH = 20;
+    const allDeleted = [];
+    const allFailed  = [];
+    let done = 0;
+
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH);
+      const res = await fetch('/api/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token(), ids: batch }),
+      });
+      const data = await res.json();
+      allDeleted.push(...(data.deleted || []));
+      allFailed.push(...(data.failed || []));
+      done += batch.length;
+      updateProgress(done, ids.length);
+    }
+    return { deleted: allDeleted, failed: allFailed };
+  }
+
+  function showOverlay(title, sub, done = 0, total = 0) {
+    document.getElementById('overlay-title').textContent = title;
+    document.getElementById('overlay-sub').textContent = sub;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    document.getElementById('overlay-bar-fill').style.width = pct + '%';
+    document.getElementById('delete-overlay').classList.add('active');
+  }
+
+  function updateOverlay(done, total) {
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    document.getElementById('overlay-bar-fill').style.width = pct + '%';
+    document.getElementById('overlay-title').textContent =
+      `Deleting… ${done} of ${total}`;
+    document.getElementById('overlay-sub').textContent =
+      `${pct}% complete — please wait, do not close this tab`;
+  }
+
+  function hideOverlay() {
+    document.getElementById('delete-overlay').classList.remove('active');
+  }
+
+  function setDeletingState(on, total = 0) {
+    document.getElementById('delete-selected-btn').disabled = on;
+    document.getElementById('delete-all-btn').disabled = on;
+    document.getElementById('load-btn').disabled = on;
+    if (on) showOverlay(`Deleting 0 of ${total}`, 'Please wait, do not close this tab', 0, total);
+    else hideOverlay();
+  }
+
+  function updateProgress(done, total) {
+    updateOverlay(done, total);
+  }
+
+  // ── Delete all ────────────────────────────────────────────────────────────
+  async function deleteAll() {
+    const n = allConversations.length;
+    if (!n) { showToast('No conversations to delete.', 'error'); return; }
+    if (!confirm(`Delete ALL ${n} conversations? This cannot be undone.`)) return;
+
+    showOverlay('Deleting all conversations…', 'Please wait, do not close this tab');
+    document.getElementById('delete-all-btn').disabled = true;
+    document.getElementById('load-btn').disabled = true;
+
+    try {
+      const res  = await fetch('/api/delete-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      allConversations = [];
+      selected.clear();
+      applyFilter();
+      showToast('All conversations deleted.', 'success');
+    } catch (e) {
+      showToast(e.message || 'Failed to delete all.', 'error');
+    } finally {
+      hideOverlay();
+      document.getElementById('delete-all-btn').disabled = false;
+      document.getElementById('load-btn').disabled = false;
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function formatDate(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return iso.slice(0, 16); }
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+
+  // Set dynamic bookmarklet href based on current app origin
+  (function () {
+    const appOrigin = window.location.origin;
+    const code = `(function(){` +
+      `fetch('https://chatgpt.com/api/auth/session')` +
+      `.then(function(r){return r.json()})` +
+      `.then(function(d){` +
+        `if(d&&d.accessToken){` +
+          `window.open('${appOrigin}/?token='+encodeURIComponent(d.accessToken),'_blank')` +
+        `}else{` +
+          `alert('No token found. Make sure you are logged in to ChatGPT.')` +
+        `}` +
+      `}).catch(function(){alert('Error fetching token.')})` +
+    `})();`;
+    document.getElementById('bookmarklet-link').href = 'javascript:' + code;
+  })();
+
+  // Restore token from sessionStorage if available
+  const storedToken = sessionStorage.getItem('cgpt_token');
+  if (storedToken) {
+    document.getElementById('token-input').value = storedToken;
+  }
+
+  // If token arrived via URL (bookmarklet redirect), save it then clear URL
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) {
+    sessionStorage.setItem('cgpt_token', urlToken);
+    document.getElementById('token-input').value = urlToken;
+    // Remove token from URL without reloading
+    const clean = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, '', clean);
+  }
+
+  // Allow Enter key in token field
+  document.getElementById('token-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadConversations();
+  });
+
+  // Save token to sessionStorage when it changes
+  document.getElementById('token-input').addEventListener('change', () => {
+    const t = document.getElementById('token-input').value.trim();
+    if (t) sessionStorage.setItem('cgpt_token', t);
+  });
+
+  // Auto-load if we have a token (from URL or session)
+  if (document.getElementById('token-input').value.trim()) {
+    loadConversations();
+  }
+</script>
+</body>
+</html>
