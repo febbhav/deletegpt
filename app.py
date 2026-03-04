@@ -66,7 +66,7 @@ def get_conversations():
             "total":         total,
             "offset":        offset,
             "page_size":     PAGE_SIZE,
-            "has_more":      (offset + len(items)) < total,
+            "has_more":      len(items) >= PAGE_SIZE,
         })
 
     except requests.RequestException as e:
