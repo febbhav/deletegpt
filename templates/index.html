@@ -540,8 +540,8 @@
             <li>Open a new tab and go to:<br>
               <code>https://chatgpt.com/api/auth/session</code>
             </li>
-            <li>You'll see a JSON blob. Find the <code>"accessToken"</code> field and copy its value (the long string starting with <code>eyJ…</code>)</li>
-            <li>Paste it into the box below and click <strong>Load Conversations</strong></li>
+            <li>You'll see a JSON blob — paste the <strong>entire thing</strong> below, or just the value of <code>"accessToken"</code> (the long string starting with <code>eyJ…</code>)</li>
+            <li>Click <strong>Load Conversations</strong> — we'll extract the token automatically</li>
           </ol>
         </div>
         <div class="fallback-divider">or</div>
@@ -565,7 +565,7 @@
       <input
         type="password"
         id="token-input"
-        placeholder="Token will auto-fill when you use the bookmarklet…"
+        placeholder="Paste token or full JSON from chatgpt.com/api/auth/session…"
         autocomplete="off"
         spellcheck="false"
         value="{{ prefill_token }}"
