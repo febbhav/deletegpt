@@ -440,6 +440,64 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Export format modal ── */
+    #export-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(4px);
+      z-index: 1001;
+      align-items: center;
+      justify-content: center;
+    }
+    #export-modal.active { display: flex; }
+    .export-card {
+      background: #1a1a1a;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 32px;
+      max-width: 360px;
+      width: 90%;
+      text-align: center;
+    }
+    .export-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .export-card p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .export-format-btns {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .btn-format {
+      flex: 1;
+      padding: 14px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: border-color .15s, background .15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-format .fmt-icon { font-size: 22px; }
+    .btn-format .fmt-ext  { font-size: 11px; color: var(--muted); font-weight: 400; }
+    .btn-format:hover { border-color: var(--accent); background: #0d1f18; }
+
     /* ── Danger zone button ── */
     .btn-danger-zone {
       background: transparent;
@@ -668,6 +726,9 @@
       <span class="sel-text" id="sel-count-text">0 selected</span>
       <div class="spacer"></div>
       <button class="btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
+      <button class="btn-ghost btn-sm" onclick="startExport('selected')" id="export-selected-btn">
+        ↓ Export Selected
+      </button>
       <button class="btn-danger" id="delete-selected-btn" onclick="deleteSelected()">
         Delete Selected
       </button>
@@ -705,8 +766,11 @@
       <button class="btn-ghost" id="load-more-btn" onclick="loadMore()">Load 50 more</button>
     </div>
 
-    <!-- Bottom delete-all -->
-    <div style="display:flex; justify-content:flex-end; padding-top:4px">
+    <!-- Bottom actions -->
+    <div style="display:flex; justify-content:space-between; align-items:center; padding-top:4px">
+      <button class="btn-ghost btn-sm" onclick="startExport('all')" id="export-all-btn">
+        ↓ Export ALL conversations
+      </button>
       <button class="btn-danger-zone" onclick="confirmDeleteAll()" id="delete-all-btn">
         ⚠ Delete ALL conversations
       </button>
@@ -714,6 +778,27 @@
 
   </div>
 </main>
+
+<!-- Export format picker modal -->
+<div id="export-modal" onclick="if(event.target===this)closeExportModal()">
+  <div class="export-card">
+    <h3>Choose export format</h3>
+    <p id="export-modal-desc">Your conversations will be downloaded as a single file.</p>
+    <div class="export-format-btns">
+      <button class="btn-format" onclick="runExport('md')">
+        <span class="fmt-icon">📄</span>
+        Markdown
+        <span class="fmt-ext">.md</span>
+      </button>
+      <button class="btn-format" onclick="runExport('json')">
+        <span class="fmt-icon">{ }</span>
+        JSON
+        <span class="fmt-ext">.json</span>
+      </button>
+    </div>
+    <button class="btn-ghost btn-sm" style="width:100%" onclick="closeExportModal()">Cancel</button>
+  </div>
+</div>
 
 <!-- Confirm delete-all modal -->
 <div id="confirm-modal" onclick="if(event.target===this)closeConfirmModal()">
@@ -1066,12 +1151,100 @@
     document.getElementById('delete-selected-btn').disabled = on;
     document.getElementById('delete-all-btn').disabled = on;
     document.getElementById('load-btn').disabled = on;
+    document.getElementById('export-all-btn').disabled = on;
+    const esb = document.getElementById('export-selected-btn');
+    if (esb) esb.disabled = on;
     if (on) showOverlay(`Deleting 0 of ${total}`, 'Please wait, do not close this tab', 0, total);
     else hideOverlay();
   }
 
   function updateProgress(done, total) {
     updateOverlay(done, total);
+  }
+
+  // ── Export ───────────────────────────────────────────────────────────────
+  let _exportScope = 'selected'; // 'selected' | 'all'
+
+  function startExport(scope) {
+    _exportScope = scope;
+    const ids = scope === 'all' ? allConversations.map(c => c.id) : [...selected];
+    if (!ids.length) { showToast('No conversations to export.', 'error'); return; }
+    const n = ids.length;
+    const label = scope === 'all' && hasMore
+      ? `All loaded conversations (${n} of ${totalAvailable})`
+      : `${n} conversation${n !== 1 ? 's' : ''}`;
+    document.getElementById('export-modal-desc').textContent =
+      `Exporting ${label} — choose a format to download.`;
+    document.getElementById('export-modal').classList.add('active');
+  }
+
+  function closeExportModal() {
+    document.getElementById('export-modal').classList.remove('active');
+  }
+
+  async function runExport(fmt) {
+    closeExportModal();
+    const convList = _exportScope === 'all' ? [...allConversations] : [...allConversations.filter(c => selected.has(c.id))];
+    const total = convList.length;
+
+    // Show progress overlay (reuse delete overlay)
+    showOverlay(`Exporting 0 of ${total}…`, 'Fetching full conversation content', 0, total);
+    document.getElementById('export-all-btn').disabled = true;
+    document.getElementById('export-selected-btn') && (document.getElementById('export-selected-btn').disabled = true);
+
+    const exported = [];
+    for (let i = 0; i < convList.length; i++) {
+      const conv = convList[i];
+      updateOverlay(i + 1, total);
+      document.getElementById('overlay-title').textContent = `Exporting ${i + 1} of ${total}…`;
+      document.getElementById('overlay-sub').textContent = conv.title || '(No title)';
+
+      try {
+        const res = await fetch(`/api/conversation/${encodeURIComponent(conv.id)}/messages?token=${encodeURIComponent(token())}`);
+        const data = await res.json();
+        exported.push({
+          id:       conv.id,
+          title:    conv.title || '(No title)',
+          date:     conv.update_time || '',
+          messages: data.messages || [],
+        });
+      } catch {
+        exported.push({ id: conv.id, title: conv.title || '(No title)', date: conv.update_time || '', messages: [] });
+      }
+    }
+
+    document.getElementById('overlay-title').textContent = 'Building file…';
+    document.getElementById('overlay-sub').textContent = 'Almost done';
+
+    const filename = `chatgpt-export-${new Date().toISOString().slice(0,10)}`;
+    if (fmt === 'json') {
+      downloadBlob(JSON.stringify(exported, null, 2), `${filename}.json`, 'application/json');
+    } else {
+      const md = exported.map(conv => {
+        const header = `# ${conv.title}\n*${conv.date ? new Date(conv.date).toLocaleString() : 'Unknown date'}*\n`;
+        const body = conv.messages.map(m =>
+          `**${m.role === 'user' ? 'User' : 'Assistant'}:** ${m.text}`
+        ).join('\n\n');
+        return header + '\n' + body;
+      }).join('\n\n---\n\n');
+      downloadBlob(md, `${filename}.md`, 'text/markdown');
+    }
+
+    hideOverlay();
+    document.getElementById('export-all-btn').disabled = false;
+    const esb = document.getElementById('export-selected-btn');
+    if (esb) esb.disabled = false;
+    showToast(`Exported ${exported.length} conversation${exported.length !== 1 ? 's' : ''}.`, 'success');
+  }
+
+  function downloadBlob(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   // ── Delete all ────────────────────────────────────────────────────────────

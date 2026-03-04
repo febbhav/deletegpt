@@ -128,12 +128,10 @@ def conversation_preview(conv_id):
         return jsonify({"error": str(e)}), 502
 
 
-def _extract_first_user_message(conv_data: dict) -> str:
-    """Walk the conversation tree and return the first user message text."""
+def _walk_chain(conv_data: dict):
+    """Return nodes oldest-first by following parent links from current_node."""
     mapping = conv_data.get("mapping", {})
-    # Find the root node and walk forward
     current_id = conv_data.get("current_node")
-    # Collect all nodes in order by following parent links from current node
     chain = []
     visited = set()
     while current_id and current_id not in visited:
@@ -141,20 +139,60 @@ def _extract_first_user_message(conv_data: dict) -> str:
         node = mapping.get(current_id, {})
         chain.append(node)
         current_id = node.get("parent")
-    chain.reverse()  # oldest first
+    chain.reverse()
+    return chain
 
-    for node in chain:
+
+def _extract_first_user_message(conv_data: dict) -> str:
+    """Return the first user message text (capped at 400 chars)."""
+    for node in _walk_chain(conv_data):
         msg = node.get("message") or {}
         role = (msg.get("author") or {}).get("role", "")
         if role != "user":
             continue
-        content = msg.get("content") or {}
-        parts = content.get("parts") or []
+        parts = (msg.get("content") or {}).get("parts") or []
         text = " ".join(p for p in parts if isinstance(p, str)).strip()
         if text:
-            return text[:400]  # cap at 400 chars
-
+            return text[:400]
     return "(No message content found)"
+
+
+def _extract_all_messages(conv_data: dict) -> list:
+    """Return all user/assistant messages in chronological order."""
+    messages = []
+    for node in _walk_chain(conv_data):
+        msg = node.get("message") or {}
+        role = (msg.get("author") or {}).get("role", "")
+        if role not in ("user", "assistant"):
+            continue
+        parts = (msg.get("content") or {}).get("parts") or []
+        text = " ".join(p for p in parts if isinstance(p, str)).strip()
+        if text:
+            messages.append({"role": role, "text": text})
+    return messages
+
+
+@app.route("/api/conversation/<conv_id>/messages")
+def conversation_messages(conv_id):
+    token = request.args.get("token", "").strip()
+    if not token:
+        return jsonify({"error": "No token provided"}), 400
+
+    try:
+        resp = http.get(
+            f"{BASE_URL}/conversation/{conv_id}",
+            headers=chatgpt_headers(token),
+            timeout=20,
+        )
+        if resp.status_code == 401:
+            return jsonify({"error": "Invalid or expired token"}), 401
+        resp.raise_for_status()
+
+        data = resp.json()
+        return jsonify({"messages": _extract_all_messages(data)})
+
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/delete-all", methods=["POST"])
