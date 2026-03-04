@@ -13,6 +13,10 @@ app = Flask(__name__)
 
 BASE_URL = "https://chatgpt.com/backend-api"
 
+# Disable system proxy detection — prevents macOS _scproxy crash after fork
+http = requests.Session()
+http.trust_env = False
+
 
 def chatgpt_headers(token: str) -> dict:
     return {
@@ -43,7 +47,7 @@ def get_conversations():
         return jsonify({"error": "No token provided"}), 400
 
     try:
-        resp = requests.get(
+        resp = http.get(
             f"{BASE_URL}/conversations",
             headers=chatgpt_headers(token),
             params={"offset": offset, "limit": PAGE_SIZE, "order": "updated"},
@@ -84,7 +88,7 @@ def delete_conversations():
 
     for conv_id in ids:
         try:
-            resp = requests.patch(
+            resp = http.patch(
                 f"{BASE_URL}/conversation/{conv_id}",
                 headers=chatgpt_headers(token),
                 json={"is_visible": False},
@@ -107,7 +111,7 @@ def conversation_preview(conv_id):
         return jsonify({"error": "No token provided"}), 400
 
     try:
-        resp = requests.get(
+        resp = http.get(
             f"{BASE_URL}/conversation/{conv_id}",
             headers=chatgpt_headers(token),
             timeout=20,
@@ -162,7 +166,7 @@ def delete_all():
         return jsonify({"error": "No token provided"}), 400
 
     try:
-        resp = requests.delete(
+        resp = http.delete(
             f"{BASE_URL}/conversations",
             headers=chatgpt_headers(token),
             timeout=30,
