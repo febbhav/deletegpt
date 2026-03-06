@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ChatGPT Conversation Manager – Flask backend
+Migration Tool off of ChatGPT – Flask backend
 Run: python app.py
 Then open: http://localhost:5000
 """
@@ -218,5 +218,5 @@ def delete_all():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n  ChatGPT Manager running at http://localhost:{port}\n")
+    print(f"\n  Migration Tool off of ChatGPT running at http://localhost:{port}\n")
     app.run(debug=False, port=port)
